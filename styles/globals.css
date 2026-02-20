@@ -65,54 +65,70 @@ body {
 }
 
 /* NUCLEAR FIX FOR GOOGLE TRANSLATE VISIBILITY */
-#google_translate_element,
-.goog-te-gadget-simple,
-.goog-te-gadget {
-  background-color: #ffffff !important; /* Force white background */
-  color: #000000 !important; /* Force black text */
-  border: 1px solid #e2e8f0 !important;
-  padding: 4px 8px !important;
-  border-radius: 4px !important;
+#google_translate_element {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 8px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
 }
 
-.dark #google_translate_element,
-.dark .goog-te-gadget-simple,
-.dark .goog-te-gadget {
-  background-color: #1e293b !important; /* Force dark background */
-  color: #ffffff !important; /* Force white text */
+.dark #google_translate_element {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
   border: 1px solid #475569 !important;
 }
 
-/* Force ALL children to inherit this color */
+/* Force all children to inherit colors and remove backgrounds */
 #google_translate_element *,
-.goog-te-gadget-simple *,
-.goog-te-gadget *,
-.goog-te-gadget-simple span,
-.goog-te-gadget-simple a,
-.goog-te-menu-value span,
-.goog-te-gadget span,
-.goog-te-gadget div,
-.goog-te-gadget a {
+#google_translate_element span,
+#google_translate_element div,
+#google_translate_element a,
+.goog-te-gadget-simple,
+.goog-te-gadget-simple > span,
+.goog-te-gadget-simple > div {
   color: inherit !important;
-  background-color: transparent !important; /* Prevent child backgrounds from obscuring */
+  background-color: transparent !important;
   text-shadow: none !important;
+  font-family: inherit !important;
 }
 
-/* Specific fix for the dropdown arrow/icon if present */
-.goog-te-gadget-icon {
-    display: none !important;
+/* Specific fix for the dropdown text color */
+.goog-te-combo {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
 }
 
-/* Hide "Powered by Google" branding if it interferes, or style it */
+.dark .goog-te-combo {
+  color: #ffffff !important;
+  background-color: #334155 !important;
+  border: 1px solid #475569 !important;
+}
+
+/* Hide Google branding if desired, or style it */
 .goog-logo-link {
-    display: none !important;
+  display: none !important;
 }
+
 .goog-te-gadget {
-    font-size: 0 !important; /* Hide text nodes directly in gadget */
+  color: transparent !important; /* Hide 'Powered by Google' text node */
 }
+
 .goog-te-gadget > div {
-    font-size: 14px !important; /* Restore font size for the dropdown */
-    display: inline-block !important;
+  display: inline-block;
+  color: inherit !important; /* Restore color for the dropdown container */
+}
+
+/* Hide the banner frame that Google sometimes injects */
+.goog-te-banner-frame {
+  display: none !important;
+}
+body {
+  top: 0px !important;
 }
 
 /* Text Styles inside the widget */
