@@ -123,6 +123,7 @@ import os from 'os';
 import crypto from 'crypto';
 import ytdl from '@distube/ytdl-core';
 import https from 'https';
+import tls from 'tls';
 
 export const config = {
   api: {
@@ -147,13 +148,28 @@ function cleanupPlayerScripts() {
   });
 }
 
-// Realistic browser headers
+// Modern browser headers
 const defaultHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
   'Connection': 'keep-alive',
 };
+
+// Custom HTTPS agent with modern TLS settings to avoid fingerprinting
+const agent = new https.Agent({
+  keepAlive: true,
+  secureOptions: tls.constants.SSL_OP_NO_SSLv3 | tls.constants.SSL_OP_NO_TLSv1 | tls.constants.SSL_OP_NO_TLSv1_1,
+  ciphers: tls.getCiphers().join(':'),
+});
 
 // Fetch a fresh CONSENT cookie from YouTube
 async function getConsentCookie(): Promise<string> {
@@ -164,6 +180,7 @@ async function getConsentCookie(): Promise<string> {
       path: '/',
       method: 'GET',
       headers: defaultHeaders,
+      agent,
       timeout: 5000,
     };
 
@@ -174,6 +191,7 @@ async function getConsentCookie(): Promise<string> {
         if (consentCookie) {
           resolve(consentCookie.split(';')[0]);
         } else {
+          // Fallback cookie that often works (from a real browser)
           resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
         }
       } else {
@@ -212,15 +230,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Get a consent cookie
+    // Get a consent cookie (or fallback)
     const consentCookie = await getConsentCookie();
 
-    // Try multiple clients (android often bypasses bot detection)
-    const clients = ['android', 'ios', 'web'];
+    // Clients to try in order (android often bypasses bot checks)
+    const clientsToTry = ['android', 'ios', 'web'];
     let info: ytdl.videoInfo | null = null;
     let lastError: any = null;
 
-    for (const client of clients) {
+    for (const client of clientsToTry) {
       try {
         info = await ytdl.getInfo(url, {
           requestOptions: {
@@ -228,23 +246,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ...defaultHeaders,
               Cookie: consentCookie,
             },
+            agent, // Use our custom agent
           },
-          // The correct option is `clients` (array) – but TypeScript definitions may be outdated.
-          // We use a type assertion to bypass this.
+          // The correct option is `clients` (array) – TypeScript definitions may be outdated, so we assert.
           ...({ clients: [client] } as any),
         });
-        break; // success
+        console.log(`[ytdl] Client ${client} succeeded.`);
+        break;
       } catch (err: any) {
         lastError = err;
-        console.warn(`Client "${client}" failed:`, err.message);
+        console.warn(`[ytdl] Client "${client}" failed:`, err.message);
       }
     }
 
     if (!info) {
-      throw new Error(`All clients failed. Last error: ${lastError?.message}`);
+      console.error('[ytdl] All clients failed. Last error:', lastError);
+      // Return a user-friendly message without exposing internal errors
+      return res.status(403).json({ error: 'YouTube is blocking the request. Please try a different video or use the file upload option.' });
     }
 
-    // Choose format: prefer video+audio, then video-only
+    // Choose format: prefer video+audio, fallback to video-only
     let format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' });
     if (!format) {
       format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
@@ -270,6 +291,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ...defaultHeaders,
           Cookie: consentCookie,
         },
+        agent,
       },
     });
 
@@ -313,7 +335,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Fetch video error:', error);
     cleanupPlayerScripts();
 
-    // Return the actual error message – no misleading overrides
-    res.status(500).json({ error: error.message || 'Failed to download video' });
+    // Generic error message (do not leak internal details)
+    res.status(500).json({ error: 'Failed to download video. Please try a different video or use the file upload option.' });
   }
 }
