@@ -132,44 +132,38 @@ export const config = {
 
 const MAX_SIZE = 1073741824; // 1GB
 
-// Clean up old player scripts (optional)
 function cleanupPlayerScripts() {
   const rootDir = process.cwd();
   fs.readdir(rootDir, (err, files) => {
     if (err) return;
     files.forEach(file => {
       if (file.match(/^\d+-player-script\.js$/)) {
-        fs.unlink(path.join(rootDir, file), (err) => {
-          if (err) console.error('Failed to delete player script:', err);
-        });
+        fs.unlink(path.join(rootDir, file), () => {});
       }
     });
   });
 }
 
-// Modern browser headers
-const defaultHeaders = {
+// Base headers that mimic a real browser (used for consent cookie)
+const baseHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
-  'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-  'Sec-Ch-Ua-Mobile': '?0',
-  'Sec-Ch-Ua-Platform': '"Windows"',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'none',
-  'Sec-Fetch-User': '?1',
-  'Upgrade-Insecure-Requests': '1',
   'Connection': 'keep-alive',
 };
 
-// Simple HTTPS agent (no fancy TLS options to avoid type errors)
+// Mobile headers for Android client (used for actual video requests)
+const androidHeaders = {
+  'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'X-YouTube-Client-Name': '3', // 3 = Android
+  'X-YouTube-Client-Version': '19.09.37',
+  'Connection': 'keep-alive',
+};
+
 const agent = new https.Agent({ keepAlive: true });
 
-// Get cookie from environment (if provided) – this is a logged-in session cookie
-const ENV_COOKIE = process.env.YOUTUBE_COOKIE || '';
-
-// Fetch a fresh CONSENT cookie from YouTube (fallback if no env cookie)
 async function getConsentCookie(): Promise<string> {
   return new Promise((resolve) => {
     const options = {
@@ -177,7 +171,7 @@ async function getConsentCookie(): Promise<string> {
       port: 443,
       path: '/',
       method: 'GET',
-      headers: defaultHeaders,
+      headers: baseHeaders,
       agent,
       timeout: 5000,
     };
@@ -189,7 +183,6 @@ async function getConsentCookie(): Promise<string> {
         if (consentCookie) {
           resolve(consentCookie.split(';')[0]);
         } else {
-          // Fallback cookie that often works
           resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
         }
       } else {
@@ -198,104 +191,85 @@ async function getConsentCookie(): Promise<string> {
       res.destroy();
     });
 
-    req.on('error', () => {
-      resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
-    });
-
+    req.on('error', () => resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123'));
     req.on('timeout', () => {
       req.destroy();
       resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
     });
-
     req.end();
   });
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const { url } = req.query;
-  if (!url || typeof url !== 'string') {
-    return res.status(400).json({ error: 'Missing url parameter' });
-  }
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
 
   try {
     cleanupPlayerScripts();
 
-    if (!ytdl.validateURL(url)) {
-      return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
+    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-    // Determine which cookie to use
-    let cookieString = ENV_COOKIE;
-    if (!cookieString) {
-      // No environment cookie, fetch a consent cookie
-      cookieString = await getConsentCookie();
-      console.log('[ytdl] Using consent cookie (no env cookie provided)');
-    } else {
-      console.log('[ytdl] Using environment cookie (logged-in session)');
-    }
+    const consentCookie = await getConsentCookie();
 
-    // Clients to try in order (android often bypasses bot checks)
-    const clientsToTry = ['android', 'ios', 'web'];
+    // Try clients in order: android, ios, web
+    const clients = [
+      { name: 'android', headers: androidHeaders },
+      { name: 'ios', headers: { ...baseHeaders, 'User-Agent': 'com.google.ios.youtube/19.09.37 (iPhone; U; CPU iOS 15_0 like Mac OS X)' } },
+      { name: 'web', headers: baseHeaders },
+    ];
+
     let info: ytdl.videoInfo | null = null;
     let lastError: any = null;
 
-    for (const client of clientsToTry) {
+    for (const { name, headers } of clients) {
       try {
         info = await ytdl.getInfo(url, {
           requestOptions: {
             headers: {
-              ...defaultHeaders,
-              Cookie: cookieString,
+              ...headers,
+              Cookie: consentCookie,
             },
             agent,
           },
-          // The correct option is `clients` (array) – TypeScript definitions may be outdated, so we assert.
-          ...({ clients: [client] } as any),
+          ...({ clients: [name] } as any), // Type assertion for clients array
         });
-        console.log(`[ytdl] Client ${client} succeeded.`);
+        console.log(`Client ${name} succeeded.`);
         break;
       } catch (err: any) {
         lastError = err;
-        console.warn(`[ytdl] Client "${client}" failed:`, err.message);
+        console.warn(`Client ${name} failed:`, err.message);
       }
     }
 
     if (!info) {
-      console.error('[ytdl] All clients failed. Last error:', lastError);
+      console.error('All clients failed:', lastError);
       return res.status(403).json({
-        error: 'YouTube is blocking the request. Please try a different video, use the file upload option, or provide a logged-in YouTube cookie (see documentation).',
+        error: 'YouTube is currently blocking downloads. Please try a different video or use the file upload option.',
       });
     }
 
     // Choose format: prefer video+audio, fallback to video-only
     let format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' });
-    if (!format) {
-      format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
-    }
+    if (!format) format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
     if (!format) throw new Error('No suitable format found');
 
-    // Check size
     const contentLength = parseInt(format.contentLength);
-    if (contentLength && contentLength > MAX_SIZE) {
-      return res.status(413).json({ error: 'Video exceeds 1GB limit' });
-    }
+    if (contentLength && contentLength > MAX_SIZE) return res.status(413).json({ error: 'Video exceeds 1GB limit' });
 
     const tempDir = os.tmpdir();
     const fileName = `video_${crypto.randomBytes(8).toString('hex')}.${format.container || 'mp4'}`;
     const filePath = path.join(tempDir, fileName);
 
-    // Download with size limit
+    // Download
     const writeStream = fs.createWriteStream(filePath);
     const downloadStream = ytdl(url, {
       format,
       requestOptions: {
         headers: {
-          ...defaultHeaders,
-          Cookie: cookieString,
+          ...baseHeaders,
+          Cookie: consentCookie,
         },
         agent,
       },
@@ -320,7 +294,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       downloadStream.on('error', reject);
     });
 
-    // Stream the file back
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', format.mimeType || 'video/mp4');
 
@@ -333,15 +306,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     fileStream.on('error', (err) => {
-      console.error('Error streaming file:', err);
+      console.error('Stream error:', err);
       fs.unlink(filePath, () => {});
     });
 
   } catch (error: any) {
-    console.error('Fetch video error:', error);
+    console.error('Fetch error:', error);
     cleanupPlayerScripts();
-
-    // Generic error message
     res.status(500).json({ error: 'Failed to download video. Please try a different video or use the file upload option.' });
   }
 }
