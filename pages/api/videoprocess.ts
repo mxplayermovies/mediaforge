@@ -185,21 +185,40 @@
 //     ];
 
 //     const isWebM = outputExt === 'webm';
+//     const totalPixels = cropW * cropH;
+
 //     if (isWebM) {
 //       ffmpegArgs.push('-c:v', 'libvpx-vp9');
 //       ffmpegArgs.push('-c:a', 'libopus');
-//       ffmpegArgs.push('-preset', 'ultrafast');
+//       // VP9 Quality/Speed settings
+//       ffmpegArgs.push('-deadline', 'realtime');
+//       ffmpegArgs.push('-cpu-used', '4'); 
 //       ffmpegArgs.push('-b:a', '128k');
-//       ffmpegArgs.push('-crf', '30');
-//       ffmpegArgs.push('-b:v', '0'); // CRF mode
+//       ffmpegArgs.push('-b:v', '0'); // Constant Quality mode
+
+//       // Dynamic CRF based on resolution for WebM
+//       if (totalPixels >= 7680 * 4320) { // 8K
+//          ffmpegArgs.push('-crf', '15');
+//       } else if (totalPixels >= 3840 * 2160) { // 4K
+//          ffmpegArgs.push('-crf', '24');
+//       } else if (totalPixels >= 2560 * 1440) { // 2K
+//          ffmpegArgs.push('-crf', '28');
+//       } else if (totalPixels >= 1920 * 1080) { // 1080p
+//          ffmpegArgs.push('-crf', '32');
+//       } else {
+//          ffmpegArgs.push('-crf', '36');
+//       }
+      
 //       ffmpegArgs.push('-pix_fmt', 'yuv420p');
 //     } else {
 //       ffmpegArgs.push('-c:v', 'libx264');
 //       ffmpegArgs.push('-preset', 'ultrafast');
 //       ffmpegArgs.push('-c:a', 'aac');
 //       ffmpegArgs.push('-b:a', '192k');
-//       const totalPixels = cropW * cropH;
-//       if (totalPixels >= 3840 * 2160) {
+      
+//       if (totalPixels >= 7680 * 4320) { // 8K
+//         ffmpegArgs.push('-b:v', '60M', '-maxrate', '80M', '-bufsize', '100M');
+//       } else if (totalPixels >= 3840 * 2160) { // 4K
 //         ffmpegArgs.push('-b:v', '20M', '-maxrate', '25M', '-bufsize', '30M');
 //       } else if (totalPixels >= 1920 * 1080) {
 //         ffmpegArgs.push('-b:v', '5M', '-maxrate', '7M', '-bufsize', '10M');
@@ -311,7 +330,6 @@
 //     res.status(status).json({ error: error.message });
 //   }
 // }
-
 
 
 import { spawn } from 'child_process';
