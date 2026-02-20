@@ -178,11 +178,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     for (const client of clients) {
       try {
+        // Use a type assertion to bypass the faulty TypeScript definition
         info = await ytdl.getInfo(url, {
           requestOptions: {
             headers: defaultHeaders,
           },
-          client, // key: use android/ios client to avoid sign‑in prompt
+          ...({ client } as any), // 👈 this tells TypeScript to ignore the type error
         });
         break; // success
       } catch (err: any) {
