@@ -1,6 +1,3 @@
-//fetch-video.ts for youtube video
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -10,7 +7,7 @@ import { voiceManager } from '../../lib/core/VoiceManager';
 import {
   ArrowLeft, Video as VideoIcon, Download, Wand2, UploadCloud,
   AlertTriangle, Loader2, Cpu, Palette, Settings, RefreshCcw,
-  Monitor, Eye, EyeOff, X, Play, Pause, Volume2, VolumeX, Layout, Globe, Clock, Activity, Trash2, Sliders
+  Monitor, Eye, EyeOff, X, Play, Pause, Volume2, VolumeX, Layout, Clock, Activity, Trash2, Sliders
 } from 'lucide-react';
 
 type TargetResolution = 'original' | '720p' | '1080p' | '4k' | '8k';
@@ -19,11 +16,8 @@ type FilterPreset = 'none' | 'vintage' | 'kodachrome' | 'technicolor' | 'polaroi
 type OutputFormat = 'original' | 'mp4' | 'webm';
 
 export default function VideoStudio() {
-  const [inputType, setInputType] = useState<'file' | 'url'>('file');
-  const [urlInput, setUrlInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const [enhance, setEnhance] = useState(false);
   const [denoise, setDenoise] = useState(false);
@@ -52,7 +46,7 @@ export default function VideoStudio() {
   const readPageGuide = () => {
     const text = `
       Guide to Video Forge Studio.
-      Step 1: Select Input. Choose Upload to select a video file, or URL to link from the web. Max file size is 1 Gigabyte.
+      Step 1: Select Input. Upload a video file. Max file size is 1 Gigabyte.
       Step 2: AI Enhancements. Check Upscale to increase resolution, or Denoise to clean up footage.
       Step 3: Color Grading. Adjust Brightness, Contrast, and Saturation, or apply filters.
       Step 4: Export Settings. Select Quality and Format.
@@ -92,7 +86,6 @@ export default function VideoStudio() {
     resetSettings();
     setPreviewUrl(null);
     setSelectedFile(null);
-    setUrlInput('');
     handleVoiceFeedback("Operation cancelled. Workspace cleared.");
   };
 
@@ -111,37 +104,6 @@ export default function VideoStudio() {
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     handleVoiceFeedback("Video loaded successfully.");
-  };
-
-  // NEW – downloads video and shows preview
-  const handleUrlSubmit = async () => {
-    if (!urlInput) return;
-    handleVoiceFeedback("Downloading video from URL.");
-    setLoadingPreview(true);
-    try {
-      const response = await fetch(`/api/fetch-video?url=${encodeURIComponent(urlInput)}`);
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to download video');
-      }
-      const blob = await response.blob();
-      // Double‑check size (backend already enforces limit)
-      if (blob.size > 1073741824) {
-        throw new Error('Video exceeds 1GB limit');
-      }
-      const fileName = 'youtube_video.mp4';
-      const file = new File([blob], fileName, { type: blob.type || 'video/mp4' });
-      handleReset(); // clear previous
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setInputType('file'); // optional, keeps UI consistent
-      handleVoiceFeedback("Video downloaded successfully. You can now adjust settings and click PROCESS.");
-    } catch (e: any) {
-      alert(e.message || "Could not download video.");
-      handleVoiceFeedback("Download failed.");
-    } finally {
-      setLoadingPreview(false);
-    }
   };
 
   const handleProcess = () => {
@@ -178,7 +140,6 @@ export default function VideoStudio() {
     e.preventDefault(); e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files?.[0]) {
-      setInputType('file');
       handleFile(e.dataTransfer.files[0]);
     }
   };
@@ -231,7 +192,7 @@ export default function VideoStudio() {
     handleReset();
   };
 
-  const processingDisabled = status === 'PROCESSING' || (!selectedFile && !urlInput);
+  const processingDisabled = status === 'PROCESSING' || !selectedFile;
 
   return (
     <>
@@ -292,27 +253,10 @@ export default function VideoStudio() {
 
               <div className="p-5 border-b border-slate-200 dark:border-white/5">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><UploadCloud size={12} /> Input Source</h3>
-                <div className="flex bg-slate-100 dark:bg-dark-950 p-1 rounded-lg mb-3 border border-slate-200 dark:border-white/5">
-                  <button onClick={() => { setInputType('file'); handleVoiceFeedback("Upload mode selected"); }} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${inputType === 'file' ? 'bg-white dark:bg-blue-600 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Upload</button>
-                  <button onClick={() => { setInputType('url'); handleVoiceFeedback("URL input selected"); }} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${inputType === 'url' ? 'bg-white dark:bg-blue-600 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>URL</button>
+                <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 transition-all">
+                  <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">{selectedFile ? selectedFile.name : "Tap to Browse"}</p>
                 </div>
-                {inputType === 'file' ? (
-                  <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 transition-all">
-                    <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">{selectedFile ? selectedFile.name : "Tap to Browse"}</p>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="https://... (YouTube URL)"
-                      className="flex-1 bg-white dark:bg-dark-950 border border-slate-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs"
-                    />
-                    <button onClick={handleUrlSubmit} disabled={loadingPreview || status === 'PROCESSING'} className="px-3 bg-slate-800 text-white rounded-lg"><Globe size={14} /></button>
-                  </div>
-                )}
               </div>
 
               {/* AI Tools */}
