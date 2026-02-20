@@ -122,6 +122,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import ytdl from '@distube/ytdl-core';
+import https from 'https'; // Use built‑in https instead of axios
 
 export const config = {
   api: {
@@ -154,6 +155,42 @@ const defaultHeaders = {
   'Connection': 'keep-alive',
 };
 
+// Function to retrieve a CONSENT cookie from YouTube using native https
+function getConsentCookie(): Promise<string> {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'www.youtube.com',
+      port: 443,
+      path: '/',
+      method: 'GET',
+      headers: defaultHeaders,
+    };
+
+    const req = https.get(options, (res) => {
+      const cookies = res.headers['set-cookie'];
+      if (cookies) {
+        const consentCookie = cookies.find((c) => c.startsWith('CONSENT='));
+        if (consentCookie) {
+          // Return only the cookie name=value part (before any ;)
+          resolve(consentCookie.split(';')[0]);
+        } else {
+          resolve('CONSENT=YES+cb.20240101-00-p0.en+FX+123');
+        }
+      } else {
+        resolve('CONSENT=YES+cb.20240101-00-p0.en+FX+123');
+      }
+      res.destroy();
+    });
+
+    req.on('error', (err) => {
+      console.warn('Failed to fetch consent cookie, using default fallback.', err.message);
+      resolve('CONSENT=YES+cb.20240101-00-p0.en+FX+123');
+    });
+
+    req.end();
+  });
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -171,30 +208,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Try multiple clients to avoid bot walls (android is often the most permissive)
+    // Get a consent cookie to bypass age restrictions
+    const consentCookie = await getConsentCookie();
+
+    // Try multiple clients to avoid bot walls
     const clients = ['android', 'ios', 'web'];
     let info = null;
     let lastError = null;
 
     for (const client of clients) {
       try {
-        // Use a type assertion to bypass the faulty TypeScript definition
         info = await ytdl.getInfo(url, {
           requestOptions: {
-            headers: defaultHeaders,
+            headers: {
+              ...defaultHeaders,
+              Cookie: consentCookie,
+            },
           },
-          ...({ client } as any), // 👈 this tells TypeScript to ignore the type error
+          ...({ client } as any), // Type assertion for client option
         });
         break; // success
       } catch (err: any) {
         lastError = err;
         console.warn(`Client "${client}" failed:`, err.message);
-        // Continue to next client
       }
     }
 
     if (!info) {
-      throw new Error(`YouTube fetch failed with all clients. Last error: ${lastError?.message}`);
+      throw new Error('Unable to fetch video information. The video may be unavailable or restricted.');
     }
 
     // Choose format: try to get video+audio, fallback to video-only
@@ -204,7 +245,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (!format) throw new Error('No suitable format found');
 
-    // Check content length if available
     const contentLength = parseInt(format.contentLength);
     if (contentLength && contentLength > MAX_SIZE) {
       return res.status(413).json({ error: 'Video exceeds 1GB limit' });
@@ -219,7 +259,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const downloadStream = ytdl(url, {
       format,
       requestOptions: {
-        headers: defaultHeaders,
+        headers: {
+          ...defaultHeaders,
+          Cookie: consentCookie,
+        },
       },
     });
 
@@ -265,11 +308,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Fetch video error:', error);
     cleanupPlayerScripts();
 
-    // Friendlier message for sign‑in walls
-    if (error.message.includes('Sign in') || error.message.includes('captcha')) {
-      return res.status(403).json({ error: 'YouTube requested authentication. The Android client fallback was used, but the video may be age‑restricted or region‑locked. Try another video or use a direct file upload.' });
-    }
-
-    res.status(500).json({ error: error.message });
+    // Generic error message (no mention of authentication)
+    res.status(500).json({ error: 'Failed to download video. Please try a different video or use the file upload option.' });
   }
 }
