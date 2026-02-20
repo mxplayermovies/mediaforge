@@ -122,7 +122,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import ytdl from '@distube/ytdl-core';
-import https from 'https'; // Use built‑in https instead of axios
+import https from 'https';
 
 export const config = {
   api: {
@@ -155,8 +155,8 @@ const defaultHeaders = {
   'Connection': 'keep-alive',
 };
 
-// Function to retrieve a CONSENT cookie from YouTube using native https
-function getConsentCookie(): Promise<string> {
+// Fetch a fresh CONSENT cookie from YouTube
+async function getConsentCookie(): Promise<string> {
   return new Promise((resolve) => {
     const options = {
       hostname: 'www.youtube.com',
@@ -164,27 +164,34 @@ function getConsentCookie(): Promise<string> {
       path: '/',
       method: 'GET',
       headers: defaultHeaders,
+      timeout: 5000,
     };
 
     const req = https.get(options, (res) => {
       const cookies = res.headers['set-cookie'];
       if (cookies) {
-        const consentCookie = cookies.find((c) => c.startsWith('CONSENT='));
+        const consentCookie = cookies.find(c => c.startsWith('CONSENT='));
         if (consentCookie) {
-          // Return only the cookie name=value part (before any ;)
           resolve(consentCookie.split(';')[0]);
         } else {
-          resolve('CONSENT=YES+cb.20240101-00-p0.en+FX+123');
+          // Fallback: widely used consent cookie (works for many age‑restricted videos)
+          resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
         }
       } else {
-        resolve('CONSENT=YES+cb.20240101-00-p0.en+FX+123');
+        resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
       }
       res.destroy();
     });
 
     req.on('error', (err) => {
       console.warn('Failed to fetch consent cookie, using default fallback.', err.message);
-      resolve('CONSENT=YES+cb.20240101-00-p0.en+FX+123');
+      resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      console.warn('Timeout fetching consent cookie, using default fallback.');
+      resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
     });
 
     req.end();
@@ -208,16 +215,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Get a consent cookie to bypass age restrictions
+    // Get consent cookie
     const consentCookie = await getConsentCookie();
+    console.log(`[ytdl] Using cookie: ${consentCookie}`);
 
-    // Try multiple clients to avoid bot walls
-    const clients = ['android', 'ios', 'web'];
-    let info = null;
-    let lastError = null;
+    // Try multiple clients – correct way: pass `clients` array
+    const clientsToTry = ['android', 'ios', 'web'];
+    let info: ytdl.videoInfo | null = null;
+    let lastError: any = null;
 
-    for (const client of clients) {
+    for (const client of clientsToTry) {
       try {
+        console.log(`[ytdl] Trying client: ${client}`);
         info = await ytdl.getInfo(url, {
           requestOptions: {
             headers: {
@@ -225,26 +234,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               Cookie: consentCookie,
             },
           },
-          ...({ client } as any), // Type assertion for client option
+          // The correct option is `clients` (array) – but the type definition may be outdated.
+          // We use a type assertion to bypass TypeScript.
+          ...({ clients: [client] } as any),
         });
-        break; // success
+        console.log(`[ytdl] Client ${client} succeeded.`);
+        break;
       } catch (err: any) {
         lastError = err;
-        console.warn(`Client "${client}" failed:`, err.message);
+        console.warn(`[ytdl] Client "${client}" failed:`, err.message);
       }
     }
 
     if (!info) {
-      throw new Error('Unable to fetch video information. The video may be unavailable or restricted.');
+      console.error('[ytdl] All clients failed. Last error:', lastError);
+      throw new Error('Unable to fetch video information. The video may be private, age‑restricted beyond consent, or a live stream.');
     }
 
-    // Choose format: try to get video+audio, fallback to video-only
+    // Choose format: prefer video+audio, then video-only
     let format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' });
     if (!format) {
       format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
     }
     if (!format) throw new Error('No suitable format found');
 
+    // Check size
     const contentLength = parseInt(format.contentLength);
     if (contentLength && contentLength > MAX_SIZE) {
       return res.status(413).json({ error: 'Video exceeds 1GB limit' });
@@ -280,12 +294,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     downloadStream.pipe(writeStream);
 
     await new Promise<void>((resolve, reject) => {
-      writeStream.on('finish', () => resolve());
+      writeStream.on('finish', resolve);
       writeStream.on('error', reject);
       downloadStream.on('error', reject);
     });
 
-    // Stream the file back to client
+    // Stream back
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', format.mimeType || 'video/mp4');
 
@@ -293,9 +307,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     fileStream.pipe(res);
 
     fileStream.on('end', () => {
-      fs.unlink(filePath, (err) => {
-        if (err) console.error('Error deleting temp file:', err);
-      });
+      fs.unlink(filePath, () => {});
       cleanupPlayerScripts();
     });
 
@@ -308,7 +320,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Fetch video error:', error);
     cleanupPlayerScripts();
 
-    // Generic error message (no mention of authentication)
-    res.status(500).json({ error: 'Failed to download video. Please try a different video or use the file upload option.' });
+    // User‑friendly messages for common failures
+    let message = 'Failed to download video. Please try a different video or use the file upload option.';
+    if (error.message.includes('private') || error.message.includes('Private video')) {
+      message = 'This video is private and cannot be downloaded.';
+    } else if (error.message.includes('live') || error.message.includes('Live stream')) {
+      message = 'Live streams cannot be downloaded.';
+    } else if (error.message.includes('age') || error.message.includes('restricted')) {
+      message = 'This video is age‑restricted and cannot be downloaded without a YouTube account.';
+    }
+
+    res.status(500).json({ error: message });
   }
 }
