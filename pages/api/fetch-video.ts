@@ -15,7 +15,7 @@ const MAX_SIZE = 1073741824; // 1GB
 
 // Helper to delete old player script files from project root
 function cleanupPlayerScripts() {
-  const rootDir = process.cwd(); // project root
+  const rootDir = process.cwd();
   fs.readdir(rootDir, (err, files) => {
     if (err) return;
     files.forEach(file => {
@@ -77,8 +77,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     downloadStream.pipe(writeStream);
 
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
+    await new Promise<void>((resolve, reject) => {
+      writeStream.on('finish', () => resolve()); // FIXED: wrap resolve in a function
       writeStream.on('error', reject);
       downloadStream.on('error', reject);
     });
@@ -86,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Stream the file back to client
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', format.mimeType || 'video/mp4');
-    
+
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
 
@@ -97,6 +97,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       // Also clean up any player scripts that might have been left
       cleanupPlayerScripts();
+    });
+
+    fileStream.on('error', (err) => {
+      console.error('Error streaming file:', err);
+      fs.unlink(filePath, () => {}); // try to delete anyway
     });
 
   } catch (error: any) {
