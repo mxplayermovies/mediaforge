@@ -123,7 +123,6 @@ import os from 'os';
 import crypto from 'crypto';
 import ytdl from '@distube/ytdl-core';
 import https from 'https';
-import tls from 'tls';
 
 export const config = {
   api: {
@@ -164,14 +163,13 @@ const defaultHeaders = {
   'Connection': 'keep-alive',
 };
 
-// Custom HTTPS agent with modern TLS settings to avoid fingerprinting
-const agent = new https.Agent({
-  keepAlive: true,
-  secureOptions: tls.constants.SSL_OP_NO_SSLv3 | tls.constants.SSL_OP_NO_TLSv1 | tls.constants.SSL_OP_NO_TLSv1_1,
-  ciphers: tls.getCiphers().join(':'),
-});
+// Simple HTTPS agent (no fancy TLS options to avoid type errors)
+const agent = new https.Agent({ keepAlive: true });
 
-// Fetch a fresh CONSENT cookie from YouTube
+// Get cookie from environment (if provided) – this is a logged-in session cookie
+const ENV_COOKIE = process.env.YOUTUBE_COOKIE || '';
+
+// Fetch a fresh CONSENT cookie from YouTube (fallback if no env cookie)
 async function getConsentCookie(): Promise<string> {
   return new Promise((resolve) => {
     const options = {
@@ -191,7 +189,7 @@ async function getConsentCookie(): Promise<string> {
         if (consentCookie) {
           resolve(consentCookie.split(';')[0]);
         } else {
-          // Fallback cookie that often works (from a real browser)
+          // Fallback cookie that often works
           resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
         }
       } else {
@@ -230,8 +228,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Get a consent cookie (or fallback)
-    const consentCookie = await getConsentCookie();
+    // Determine which cookie to use
+    let cookieString = ENV_COOKIE;
+    if (!cookieString) {
+      // No environment cookie, fetch a consent cookie
+      cookieString = await getConsentCookie();
+      console.log('[ytdl] Using consent cookie (no env cookie provided)');
+    } else {
+      console.log('[ytdl] Using environment cookie (logged-in session)');
+    }
 
     // Clients to try in order (android often bypasses bot checks)
     const clientsToTry = ['android', 'ios', 'web'];
@@ -244,9 +249,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           requestOptions: {
             headers: {
               ...defaultHeaders,
-              Cookie: consentCookie,
+              Cookie: cookieString,
             },
-            agent, // Use our custom agent
+            agent,
           },
           // The correct option is `clients` (array) – TypeScript definitions may be outdated, so we assert.
           ...({ clients: [client] } as any),
@@ -261,8 +266,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!info) {
       console.error('[ytdl] All clients failed. Last error:', lastError);
-      // Return a user-friendly message without exposing internal errors
-      return res.status(403).json({ error: 'YouTube is blocking the request. Please try a different video or use the file upload option.' });
+      return res.status(403).json({
+        error: 'YouTube is blocking the request. Please try a different video, use the file upload option, or provide a logged-in YouTube cookie (see documentation).',
+      });
     }
 
     // Choose format: prefer video+audio, fallback to video-only
@@ -289,7 +295,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       requestOptions: {
         headers: {
           ...defaultHeaders,
-          Cookie: consentCookie,
+          Cookie: cookieString,
         },
         agent,
       },
@@ -335,7 +341,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Fetch video error:', error);
     cleanupPlayerScripts();
 
-    // Generic error message (do not leak internal details)
+    // Generic error message
     res.status(500).json({ error: 'Failed to download video. Please try a different video or use the file upload option.' });
   }
 }
