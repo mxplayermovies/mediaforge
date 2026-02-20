@@ -116,14 +116,12 @@
 
 
 
-
 import { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import ytdl from '@distube/ytdl-core';
-import https from 'https';
 
 export const config = {
   api: {
@@ -133,7 +131,7 @@ export const config = {
 
 const MAX_SIZE = 1073741824; // 1GB
 
-// Clean up old player scripts (optional, unrelated to YouTube)
+// Clean up old player scripts (optional)
 function cleanupPlayerScripts() {
   const rootDir = process.cwd();
   fs.readdir(rootDir, (err, files) => {
@@ -148,16 +146,13 @@ function cleanupPlayerScripts() {
   });
 }
 
-// Browser‑like headers to further reduce detection
+// Realistic browser headers
 const defaultHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'Connection': 'keep-alive',
 };
-
-// Create a reusable HTTPS agent with keepAlive
-const agent = new https.Agent({ keepAlive: true });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -170,14 +165,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Clean up old player scripts (optional)
     cleanupPlayerScripts();
 
     if (!ytdl.validateURL(url)) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Try multiple clients in order of preference (Android usually bypasses bot checks)
+    // Try multiple clients to avoid bot walls (android is often the most permissive)
     const clients = ['android', 'ios', 'web'];
     let info = null;
     let lastError = null;
@@ -187,9 +181,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         info = await ytdl.getInfo(url, {
           requestOptions: {
             headers: defaultHeaders,
-            agent,
           },
-          client, // key: use android/ios client to avoid sign‑in wall
+          client, // key: use android/ios client to avoid sign‑in prompt
         });
         break; // success
       } catch (err: any) {
@@ -203,15 +196,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error(`YouTube fetch failed with all clients. Last error: ${lastError?.message}`);
     }
 
-    // Choose the best format (highest quality with both video & audio if possible)
+    // Choose format: try to get video+audio, fallback to video-only
     let format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' });
     if (!format) {
-      // Fallback: highest video only (will need to merge audio later, but we skip merging for simplicity)
       format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
     }
     if (!format) throw new Error('No suitable format found');
 
-    // Check size from contentLength if available
+    // Check content length if available
     const contentLength = parseInt(format.contentLength);
     if (contentLength && contentLength > MAX_SIZE) {
       return res.status(413).json({ error: 'Video exceeds 1GB limit' });
@@ -221,13 +213,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fileName = `video_${crypto.randomBytes(8).toString('hex')}.${format.container || 'mp4'}`;
     const filePath = path.join(tempDir, fileName);
 
-    // Download with size limit and progress tracking
+    // Download with size limit
     const writeStream = fs.createWriteStream(filePath);
     const downloadStream = ytdl(url, {
       format,
       requestOptions: {
         headers: defaultHeaders,
-        agent,
       },
     });
 
@@ -250,14 +241,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       downloadStream.on('error', reject);
     });
 
-    // Stream the file back to the client
+    // Stream the file back to client
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', format.mimeType || 'video/mp4');
 
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
 
-    // Delete temp file after sending
     fileStream.on('end', () => {
       fs.unlink(filePath, (err) => {
         if (err) console.error('Error deleting temp file:', err);
@@ -274,9 +264,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Fetch video error:', error);
     cleanupPlayerScripts();
 
-    // Provide a clearer error message if it's likely a bot wall
+    // Friendlier message for sign‑in walls
     if (error.message.includes('Sign in') || error.message.includes('captcha')) {
-      return res.status(403).json({ error: 'YouTube is requesting authentication. The Android client fallback should have avoided this – please try again or report the video URL.' });
+      return res.status(403).json({ error: 'YouTube requested authentication. The Android client fallback was used, but the video may be age‑restricted or region‑locked. Try another video or use a direct file upload.' });
     }
 
     res.status(500).json({ error: error.message });
