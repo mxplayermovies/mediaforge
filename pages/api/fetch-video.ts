@@ -174,7 +174,6 @@ async function getConsentCookie(): Promise<string> {
         if (consentCookie) {
           resolve(consentCookie.split(';')[0]);
         } else {
-          // Fallback: widely used consent cookie (works for many age‑restricted videos)
           resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
         }
       } else {
@@ -183,14 +182,12 @@ async function getConsentCookie(): Promise<string> {
       res.destroy();
     });
 
-    req.on('error', (err) => {
-      console.warn('Failed to fetch consent cookie, using default fallback.', err.message);
+    req.on('error', () => {
       resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
     });
 
     req.on('timeout', () => {
       req.destroy();
-      console.warn('Timeout fetching consent cookie, using default fallback.');
       resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
     });
 
@@ -215,18 +212,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Get consent cookie
+    // Get a consent cookie
     const consentCookie = await getConsentCookie();
-    console.log(`[ytdl] Using cookie: ${consentCookie}`);
 
-    // Try multiple clients – correct way: pass `clients` array
-    const clientsToTry = ['android', 'ios', 'web'];
+    // Try multiple clients (android often bypasses bot detection)
+    const clients = ['android', 'ios', 'web'];
     let info: ytdl.videoInfo | null = null;
     let lastError: any = null;
 
-    for (const client of clientsToTry) {
+    for (const client of clients) {
       try {
-        console.log(`[ytdl] Trying client: ${client}`);
         info = await ytdl.getInfo(url, {
           requestOptions: {
             headers: {
@@ -234,21 +229,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               Cookie: consentCookie,
             },
           },
-          // The correct option is `clients` (array) – but the type definition may be outdated.
-          // We use a type assertion to bypass TypeScript.
+          // The correct option is `clients` (array) – but TypeScript definitions may be outdated.
+          // We use a type assertion to bypass this.
           ...({ clients: [client] } as any),
         });
-        console.log(`[ytdl] Client ${client} succeeded.`);
-        break;
+        break; // success
       } catch (err: any) {
         lastError = err;
-        console.warn(`[ytdl] Client "${client}" failed:`, err.message);
+        console.warn(`Client "${client}" failed:`, err.message);
       }
     }
 
     if (!info) {
-      console.error('[ytdl] All clients failed. Last error:', lastError);
-      throw new Error('Unable to fetch video information. The video may be private, age‑restricted beyond consent, or a live stream.');
+      throw new Error(`All clients failed. Last error: ${lastError?.message}`);
     }
 
     // Choose format: prefer video+audio, then video-only
@@ -299,7 +292,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       downloadStream.on('error', reject);
     });
 
-    // Stream back
+    // Stream the file back
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', format.mimeType || 'video/mp4');
 
@@ -320,16 +313,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Fetch video error:', error);
     cleanupPlayerScripts();
 
-    // User‑friendly messages for common failures
-    let message = 'Failed to download video. Please try a different video or use the file upload option.';
-    if (error.message.includes('private') || error.message.includes('Private video')) {
-      message = 'This video is private and cannot be downloaded.';
-    } else if (error.message.includes('live') || error.message.includes('Live stream')) {
-      message = 'Live streams cannot be downloaded.';
-    } else if (error.message.includes('age') || error.message.includes('restricted')) {
-      message = 'This video is age‑restricted and cannot be downloaded without a YouTube account.';
-    }
-
-    res.status(500).json({ error: message });
+    // Return the actual error message – no misleading overrides
+    res.status(500).json({ error: error.message || 'Failed to download video' });
   }
 }
