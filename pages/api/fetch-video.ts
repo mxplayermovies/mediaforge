@@ -122,7 +122,6 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import ytdl from '@distube/ytdl-core';
-import https from 'https';
 
 export const config = {
   api: {
@@ -145,70 +144,34 @@ function cleanupPlayerScripts() {
   });
 }
 
-// Base headers for fetching consent cookie
-const baseHeaders = {
+// Realistic browser headers for Android client (mimics YouTube app)
+const androidHeaders = {
+  'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'X-YouTube-Client-Name': '3',
+  'X-YouTube-Client-Version': '19.09.37',
+  'Connection': 'keep-alive',
+};
+
+// iOS headers fallback
+const iosHeaders = {
+  'User-Agent': 'com.google.ios.youtube/19.09.37 (iPhone; U; CPU iOS 15_0 like Mac OS X)',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Connection': 'keep-alive',
+};
+
+// Web headers fallback
+const webHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
   'Connection': 'keep-alive',
 };
 
-// Android-specific headers for video requests (mimics official YouTube app)
-const androidHeaders = {
-  'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'X-YouTube-Client-Name': '3', // 3 = Android
-  'X-YouTube-Client-Version': '19.09.37',
-  'Connection': 'keep-alive',
-};
-
-// iOS headers for fallback
-const iosHeaders = {
-  ...baseHeaders,
-  'User-Agent': 'com.google.ios.youtube/19.09.37 (iPhone; U; CPU iOS 15_0 like Mac OS X)',
-};
-
-// HTTPS agent used only for consent cookie fetch (not for ytdl)
-const agent = new https.Agent({ keepAlive: true });
-
-// Fetch a fresh CONSENT cookie from YouTube
-async function getConsentCookie(): Promise<string> {
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'www.youtube.com',
-      port: 443,
-      path: '/',
-      method: 'GET',
-      headers: baseHeaders,
-      agent,
-      timeout: 5000,
-    };
-
-    const req = https.get(options, (res) => {
-      const cookies = res.headers['set-cookie'];
-      if (cookies) {
-        const consentCookie = cookies.find(c => c.startsWith('CONSENT='));
-        if (consentCookie) {
-          resolve(consentCookie.split(';')[0]);
-        } else {
-          // Fallback consent cookie (often works)
-          resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
-        }
-      } else {
-        resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
-      }
-      res.destroy();
-    });
-
-    req.on('error', () => resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123'));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
-    });
-    req.end();
-  });
-}
+// Hardcoded consent cookie that often works (from a real browser)
+const DEFAULT_COOKIE = 'CONSENT=YES+cb.20250101-00-p0.en+FX+123; VISITOR_INFO1_LIVE=some-value;';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -227,13 +190,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    const consentCookie = await getConsentCookie();
-
     // Try clients in order: android, ios, web
     const clients = [
       { name: 'android', headers: androidHeaders },
       { name: 'ios', headers: iosHeaders },
-      { name: 'web', headers: baseHeaders },
+      { name: 'web', headers: webHeaders },
     ];
 
     let info: ytdl.videoInfo | null = null;
@@ -245,11 +206,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           requestOptions: {
             headers: {
               ...headers,
-              Cookie: consentCookie,
+              Cookie: DEFAULT_COOKIE,
             },
-            // agent is NOT passed here – ytdl uses its own network stack
           },
-          // Pass the client as an array using type assertion to bypass outdated types
+          // Pass the client as an array – type assertion to bypass outdated types
           ...({ clients: [name] } as any),
         });
         console.log(`Client ${name} succeeded.`);
@@ -263,7 +223,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!info) {
       console.error('All clients failed:', lastError);
       return res.status(403).json({
-        error: 'YouTube is currently blocking downloads. Please try a different video or use the file upload option.',
+        error: 'YouTube is blocking downloads from this server. Please use the file upload option instead.',
       });
     }
 
@@ -289,10 +249,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       format,
       requestOptions: {
         headers: {
-          ...baseHeaders,
-          Cookie: consentCookie,
+          ...webHeaders,
+          Cookie: DEFAULT_COOKIE,
         },
-        // agent not allowed here
       },
     });
 
