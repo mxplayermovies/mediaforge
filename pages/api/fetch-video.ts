@@ -132,6 +132,7 @@ export const config = {
 
 const MAX_SIZE = 1073741824; // 1GB
 
+// Clean up old player scripts (optional)
 function cleanupPlayerScripts() {
   const rootDir = process.cwd();
   fs.readdir(rootDir, (err, files) => {
@@ -144,7 +145,7 @@ function cleanupPlayerScripts() {
   });
 }
 
-// Base headers that mimic a real browser (used for consent cookie)
+// Base headers for fetching consent cookie
 const baseHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -152,7 +153,7 @@ const baseHeaders = {
   'Connection': 'keep-alive',
 };
 
-// Mobile headers for Android client (used for actual video requests)
+// Android-specific headers for video requests (mimics official YouTube app)
 const androidHeaders = {
   'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -162,8 +163,16 @@ const androidHeaders = {
   'Connection': 'keep-alive',
 };
 
+// iOS headers for fallback
+const iosHeaders = {
+  ...baseHeaders,
+  'User-Agent': 'com.google.ios.youtube/19.09.37 (iPhone; U; CPU iOS 15_0 like Mac OS X)',
+};
+
+// HTTPS agent used only for consent cookie fetch (not for ytdl)
 const agent = new https.Agent({ keepAlive: true });
 
+// Fetch a fresh CONSENT cookie from YouTube
 async function getConsentCookie(): Promise<string> {
   return new Promise((resolve) => {
     const options = {
@@ -183,6 +192,7 @@ async function getConsentCookie(): Promise<string> {
         if (consentCookie) {
           resolve(consentCookie.split(';')[0]);
         } else {
+          // Fallback consent cookie (often works)
           resolve('CONSENT=YES+cb.20250101-00-p0.en+FX+123');
         }
       } else {
@@ -201,22 +211,28 @@ async function getConsentCookie(): Promise<string> {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { url } = req.query;
-  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'Missing url parameter' });
+  }
 
   try {
     cleanupPlayerScripts();
 
-    if (!ytdl.validateURL(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
+    if (!ytdl.validateURL(url)) {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
 
     const consentCookie = await getConsentCookie();
 
     // Try clients in order: android, ios, web
     const clients = [
       { name: 'android', headers: androidHeaders },
-      { name: 'ios', headers: { ...baseHeaders, 'User-Agent': 'com.google.ios.youtube/19.09.37 (iPhone; U; CPU iOS 15_0 like Mac OS X)' } },
+      { name: 'ios', headers: iosHeaders },
       { name: 'web', headers: baseHeaders },
     ];
 
@@ -231,9 +247,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ...headers,
               Cookie: consentCookie,
             },
-            agent,
+            // agent is NOT passed here – ytdl uses its own network stack
           },
-          ...({ clients: [name] } as any), // Type assertion for clients array
+          // Pass the client as an array using type assertion to bypass outdated types
+          ...({ clients: [name] } as any),
         });
         console.log(`Client ${name} succeeded.`);
         break;
@@ -252,17 +269,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Choose format: prefer video+audio, fallback to video-only
     let format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' });
-    if (!format) format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
+    if (!format) {
+      format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
+    }
     if (!format) throw new Error('No suitable format found');
 
     const contentLength = parseInt(format.contentLength);
-    if (contentLength && contentLength > MAX_SIZE) return res.status(413).json({ error: 'Video exceeds 1GB limit' });
+    if (contentLength && contentLength > MAX_SIZE) {
+      return res.status(413).json({ error: 'Video exceeds 1GB limit' });
+    }
 
     const tempDir = os.tmpdir();
     const fileName = `video_${crypto.randomBytes(8).toString('hex')}.${format.container || 'mp4'}`;
     const filePath = path.join(tempDir, fileName);
 
-    // Download
+    // Download video with size limit
     const writeStream = fs.createWriteStream(filePath);
     const downloadStream = ytdl(url, {
       format,
@@ -271,7 +292,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ...baseHeaders,
           Cookie: consentCookie,
         },
-        agent,
+        // agent not allowed here
       },
     });
 
@@ -294,6 +315,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       downloadStream.on('error', reject);
     });
 
+    // Stream file back to client
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', format.mimeType || 'video/mp4');
 
