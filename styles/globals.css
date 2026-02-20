@@ -65,8 +65,7 @@ body {
 }
 
 /* NUCLEAR FIX FOR GOOGLE TRANSLATE VISIBILITY */
-#google_translate_element_desktop,
-#google_translate_element_mobile,
+#google_translate_element,
 .goog-te-gadget-simple,
 .goog-te-gadget {
   background-color: #ffffff !important; /* Force white background */
@@ -76,8 +75,7 @@ body {
   border-radius: 4px !important;
 }
 
-.dark #google_translate_element_desktop,
-.dark #google_translate_element_mobile,
+.dark #google_translate_element,
 .dark .goog-te-gadget-simple,
 .dark .goog-te-gadget {
   background-color: #1e293b !important; /* Force dark background */
@@ -86,8 +84,7 @@ body {
 }
 
 /* Force ALL children to inherit this color */
-#google_translate_element_desktop *,
-#google_translate_element_mobile *,
+#google_translate_element *,
 .goog-te-gadget-simple *,
 .goog-te-gadget *,
 .goog-te-gadget-simple span,
