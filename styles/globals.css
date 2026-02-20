@@ -80,7 +80,7 @@ body {
   border: 1px solid #475569 !important;
 }
 
-/* Force all children to inherit colors and remove backgrounds */
+/* Force all children to inherit colors and remove backgrounds (safe for select) */
 #google_translate_element *,
 #google_translate_element span,
 #google_translate_element div,
@@ -94,8 +94,16 @@ body {
   font-family: inherit !important;
 }
 
-/* Specific fix for the dropdown text color */
+/* --- FIX FOR VISIBLE TEXT (DESKTOP / LAPTOP) --- */
+/* Hide the "Powered by Google" text node without hiding the select */
+.goog-te-gadget {
+  font-size: 0 !important;         /* hides the unwanted text node */
+  /* color: transparent removed – was making text invisible */
+}
+
+/* The <select> element must have its own font size and visible color */
 .goog-te-combo {
+  font-size: 1rem !important;       /* or 16px – ensures text is readable */
   color: #000000 !important;
   background-color: #ffffff !important;
   border: 1px solid #cbd5e1 !important;
@@ -114,15 +122,6 @@ body {
   display: none !important;
 }
 
-.goog-te-gadget {
-  color: transparent !important; /* Hide 'Powered by Google' text node */
-}
-
-.goog-te-gadget > div {
-  display: inline-block;
-  color: inherit !important; /* Restore color for the dropdown container */
-}
-
 /* Hide the banner frame that Google sometimes injects */
 .goog-te-banner-frame {
   display: none !important;
@@ -131,16 +130,7 @@ body {
   top: 0px !important;
 }
 
-/* Text Styles inside the widget */
-/* .goog-te-gadget-simple > span {
-  color: #334155 !important; 
-  display: inline-block; 
-} */
-
-/* .dark .goog-te-gadget-simple > span {
-  color: #e2e8f0 !important; 
-} */
-
+/* Text Styles inside the widget (for SIMPLE layout – kept for compatibility) */
 .goog-te-gadget-simple > span > a {
     color: inherit !important;
     font-weight: 600 !important;
@@ -149,8 +139,6 @@ body {
 .goog-te-gadget-simple .goog-te-menu-value {
   color: inherit !important;
   margin: 0 !important;
-  /* display: flex !important; */
-  /* align-items: center !important; */
   max-width: 100% !important;
 }
 
@@ -159,8 +147,6 @@ body {
   font-weight: 500 !important;
   text-transform: none !important;
   padding-right: 4px !important;
-  /* overflow: hidden !important; */
-  /* text-overflow: ellipsis !important; */
 }
 
 /* Hide the Google Icon - Optional, keeping hidden for cleaner look */
@@ -173,17 +159,17 @@ body {
     display: none !important;
 }
 
-/* Dropdown Menu Styles - Responsive Fixes */
+/* Dropdown Menu Styles - Responsive Fixes (for SIMPLE layout) */
 .goog-te-menu-frame {
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
   border-radius: 0.75rem !important;
   border: 1px solid rgba(226, 232, 240, 1) !important;
   z-index: 999999 !important;
-  position: fixed !important; /* Ensure it stays on screen */
+  position: fixed !important;
   top: 50% !important;
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
-  max-height: 80vh !important; /* Prevent it from being too tall on mobile */
+  max-height: 80vh !important;
   max-width: 90vw !important;
   overflow-y: auto !important;
 }
@@ -201,15 +187,15 @@ body {
     box-shadow: none !important;
 }
 
-/* Fix for "Powered by Google" text */
+/* Fix for "Powered by Google" text (already handled by font-size:0 on parent) */
 .goog-te-gadget {
-    color: transparent !important;
-    font-size: 0 !important;
+    font-size: 0 !important;        /* hide the text node */
     width: 100% !important;
 }
 .goog-te-gadget > div {
     display: inline-block;
     width: 100% !important;
+    /* font-size will be set by child select */
 }
 
 /* Ensure the widget container doesn't break layout */
