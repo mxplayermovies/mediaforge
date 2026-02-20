@@ -1,6 +1,7 @@
+
 // export class VoiceManager {
 //   private synth: SpeechSynthesis | null = null;
-//   private voice: SpeechSynthesisVoice | null = null;
+//   private availableVoices: SpeechSynthesisVoice[] = []; // Eligible voices (Microsoft English, then any English)
 //   private lastMilestone = -1;
 //   private initialized = false;
 
@@ -15,44 +16,74 @@
 //     }
 //   }
 
+//   /**
+//    * Loads and filters voices:
+//    * 1. All Microsoft English voices (lang starts with 'en' and name includes 'Microsoft')
+//    * 2. If none found, fallback to any English voice
+//    */
 //   private loadVoices() {
 //     if (!this.synth) return;
 //     const voices = this.synth.getVoices();
-    
-//     // Priority Selection Algorithm:
-//     // 1. "Brian" + "Neural" (Specific request for high-quality male voice)
-//     // 2. Any "Microsoft" + "Online" + "Natural" (Edge Cloud Voices)
-//     // 3. Any "Microsoft" voice (Standard Windows voices)
-//     // 4. Default English voice
-    
-//     this.voice = voices.find(v => v.name.includes('Brian') && v.name.includes('Neural'))
-//               || voices.find(v => v.name.includes('Microsoft') && v.name.includes('Online') && v.lang.includes('en'))
-//               || voices.find(v => v.name.includes('Microsoft') && v.lang.includes('en'))
-//               || voices.find(v => v.lang.startsWith('en'))
-//               || null;
-              
-//     if (this.voice && !this.initialized) {
-//         console.log(`Voice Engine Initialized: ${this.voice.name}`);
-//         this.initialized = true;
+
+//     // Microsoft English voices (preferred)
+//     const microsoftEnglish = voices.filter(
+//       v => v.lang.startsWith('en') && v.name.includes('Microsoft')
+//     );
+
+//     // If Microsoft voices exist, use them; otherwise use any English voice
+//     this.availableVoices = microsoftEnglish.length > 0
+//       ? microsoftEnglish
+//       : voices.filter(v => v.lang.startsWith('en'));
+
+//     if (!this.initialized) {
+//       console.log(`Voice engine initialized with ${this.availableVoices.length} eligible voices.`);
+//       if (this.availableVoices.length > 0) {
+//         console.log(`Sample voice: ${this.availableVoices[0].name}`);
+//       }
+//       this.initialized = true;
 //     }
 //   }
 
+//   /**
+//    * Returns a random voice from the available list.
+//    * If the list is empty, attempts to reload voices and returns the first English voice (or null).
+//    */
+//   private getRandomVoice(): SpeechSynthesisVoice | null {
+//     // Reload voices if none are available (sometimes needed after browser updates)
+//     if (this.availableVoices.length === 0) {
+//       this.loadVoices();
+//     }
+
+//     if (this.availableVoices.length === 0) {
+//       console.warn('No English voices found. Speech will use default system voice.');
+//       return null;
+//     }
+
+//     const randomIndex = Math.floor(Math.random() * this.availableVoices.length);
+//     return this.availableVoices[randomIndex];
+//   }
+
+//   /**
+//    * Speaks the given text using a randomly selected voice.
+//    * @param text - The text to speak
+//    * @param force - If true, cancels any ongoing speech before speaking
+//    */
 //   public speak(text: string, force: boolean = true) {
 //     if (!this.synth) return;
 
-//     // Retry loading voice if missing (sometimes needed on first interaction)
-//     if (!this.voice) this.loadVoices();
-
 //     if (force) {
-//         this.synth.cancel();
+//       this.synth.cancel();
 //     }
 
 //     const utterance = new SpeechSynthesisUtterance(text);
-//     if (this.voice) {
-//         utterance.voice = this.voice;
+//     const selectedVoice = this.getRandomVoice();
+
+//     if (selectedVoice) {
+//       utterance.voice = selectedVoice;
+//       console.log(`Speaking with voice: ${selectedVoice.name}`);
 //     }
-    
-//     // Adjust rate for natural feel
+
+//     // Natural speech settings
 //     utterance.rate = 1.0;
 //     utterance.pitch = 1.0;
 //     utterance.volume = 1.0;
@@ -60,34 +91,40 @@
 //     this.synth.speak(utterance);
 //   }
 
+//   /**
+//    * Announces progress milestones (e.g., 10%, 25%, 50%, 75%, 90%).
+//    * Uses the same random voice selection.
+//    */
 //   public announceProgress(progress: number) {
-//     // Milestones for voice feedback
 //     const milestones = [10, 25, 50, 75, 90];
-    
-//     // Find if we just crossed a milestone
 //     const crossedMilestone = milestones.find(m => progress >= m && this.lastMilestone < m);
-    
+
 //     if (crossedMilestone) {
 //       this.speak(`${crossedMilestone}% processing completed.`);
 //       this.lastMilestone = crossedMilestone;
 //     }
 //   }
 
+//   /**
+//    * Resets the milestone tracker and cancels any ongoing speech.
+//    */
 //   public reset() {
 //     this.lastMilestone = -1;
 //     if (this.synth) {
-//         this.synth.cancel();
+//       this.synth.cancel();
 //     }
 //   }
 // }
 
 // export const voiceManager = new VoiceManager();
 
+
 export class VoiceManager {
   private synth: SpeechSynthesis | null = null;
-  private availableVoices: SpeechSynthesisVoice[] = []; // Eligible voices (Microsoft English, then any English)
+  private availableVoices: SpeechSynthesisVoice[] = []; 
   private lastMilestone = -1;
   private initialized = false;
+  private currentLang = 'en'; // Default to English
 
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -101,36 +138,68 @@ export class VoiceManager {
   }
 
   /**
-   * Loads and filters voices:
-   * 1. All Microsoft English voices (lang starts with 'en' and name includes 'Microsoft')
-   * 2. If none found, fallback to any English voice
+   * Sets the current language for TTS (e.g., 'es', 'fr', 'zh-CN').
+   * Reloads voices to match the new language.
+   */
+  public setLanguage(lang: string) {
+    // Google Translate uses codes like 'zh-CN', 'es', etc.
+    // We normalize to match speech synthesis voice tags if needed.
+    this.currentLang = lang;
+    console.log(`VoiceManager: Language set to ${this.currentLang}`);
+    this.loadVoices();
+  }
+
+  /**
+   * Loads and filters voices based on the current language.
+   * 1. Tries to find voices matching the current language code.
+   * 2. Prioritizes 'Microsoft' or 'Google' voices for better quality if available.
    */
   private loadVoices() {
     if (!this.synth) return;
     const voices = this.synth.getVoices();
 
-    // Microsoft English voices (preferred)
-    const microsoftEnglish = voices.filter(
-      v => v.lang.startsWith('en') && v.name.includes('Microsoft')
-    );
+    // Filter voices that start with the current language code (e.g., 'en', 'es', 'fr')
+    let langVoices = voices.filter(v => v.lang.startsWith(this.currentLang));
 
-    // If Microsoft voices exist, use them; otherwise use any English voice
-    this.availableVoices = microsoftEnglish.length > 0
-      ? microsoftEnglish
-      : voices.filter(v => v.lang.startsWith('en'));
+    // If exact match fails (e.g. 'zh-CN' vs 'zh'), try broader match
+    if (langVoices.length === 0 && this.currentLang.includes('-')) {
+        const baseLang = this.currentLang.split('-')[0];
+        langVoices = voices.filter(v => v.lang.startsWith(baseLang));
+    }
+
+    // STRICT FALLBACK: If no voices found for the detected language, force English
+    if (langVoices.length === 0) {
+        console.warn(`No voices found for ${this.currentLang}, forcing fallback to English.`);
+        langVoices = voices.filter(v => v.lang.startsWith('en'));
+    }
+
+    // Priority: Microsoft > Google > Others
+    // The user specifically requested Microsoft Edge TTS priority or fallback to English
+    const microsoftVoices = langVoices.filter(v => v.name.includes('Microsoft'));
+    const googleVoices = langVoices.filter(v => v.name.includes('Google'));
+    
+    if (microsoftVoices.length > 0) {
+        this.availableVoices = microsoftVoices;
+    } else if (googleVoices.length > 0) {
+        this.availableVoices = googleVoices;
+    } else {
+        this.availableVoices = langVoices;
+    }
+    
+    // Final Safety Net: If somehow we still have no voices (e.g. even English failed), try to grab ANY English voice
+    if (this.availableVoices.length === 0) {
+         this.availableVoices = voices.filter(v => v.lang.startsWith('en'));
+    }
 
     if (!this.initialized) {
-      console.log(`Voice engine initialized with ${this.availableVoices.length} eligible voices.`);
-      if (this.availableVoices.length > 0) {
-        console.log(`Sample voice: ${this.availableVoices[0].name}`);
-      }
+      console.log(`Voice engine initialized with ${this.availableVoices.length} eligible voices for ${this.currentLang}.`);
       this.initialized = true;
     }
   }
 
   /**
    * Returns a random voice from the available list.
-   * If the list is empty, attempts to reload voices and returns the first English voice (or null).
+   * If the list is empty, attempts to reload voices and returns the first available voice.
    */
   private getRandomVoice(): SpeechSynthesisVoice | null {
     // Reload voices if none are available (sometimes needed after browser updates)
@@ -139,7 +208,7 @@ export class VoiceManager {
     }
 
     if (this.availableVoices.length === 0) {
-      console.warn('No English voices found. Speech will use default system voice.');
+      console.warn('No suitable voices found. Speech will use default system voice.');
       return null;
     }
 
@@ -148,7 +217,7 @@ export class VoiceManager {
   }
 
   /**
-   * Speaks the given text using a randomly selected voice.
+   * Speaks the given text using a randomly selected voice matching the current language.
    * @param text - The text to speak
    * @param force - If true, cancels any ongoing speech before speaking
    */
@@ -164,7 +233,7 @@ export class VoiceManager {
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
-      console.log(`Speaking with voice: ${selectedVoice.name}`);
+      // console.log(`Speaking with voice: ${selectedVoice.name} (${selectedVoice.lang})`);
     }
 
     // Natural speech settings
@@ -201,9 +270,6 @@ export class VoiceManager {
 }
 
 export const voiceManager = new VoiceManager();
-
-
-
 
 
 

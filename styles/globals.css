@@ -19,6 +19,8 @@ body {
   background-color: rgb(var(--background-start-rgb));
   min-height: 100vh;
   transition: background-color 0.3s ease, color 0.3s ease;
+  /* Fix for Google Translate Top Bar shifting body */
+  top: 0 !important;
 }
 
 html {
@@ -49,4 +51,161 @@ html {
 
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
+}
+
+/* --- GOOGLE TRANSLATE OVERRIDES --- */
+
+/* Hide Top Banner */
+.goog-te-banner-frame {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
+
+/* NUCLEAR FIX FOR GOOGLE TRANSLATE VISIBILITY */
+#google_translate_element_desktop,
+#google_translate_element_mobile,
+.goog-te-gadget-simple,
+.goog-te-gadget {
+  background-color: #ffffff !important; /* Force white background */
+  color: #000000 !important; /* Force black text */
+  border: 1px solid #e2e8f0 !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+}
+
+.dark #google_translate_element_desktop,
+.dark #google_translate_element_mobile,
+.dark .goog-te-gadget-simple,
+.dark .goog-te-gadget {
+  background-color: #1e293b !important; /* Force dark background */
+  color: #ffffff !important; /* Force white text */
+  border: 1px solid #475569 !important;
+}
+
+/* Force ALL children to inherit this color */
+#google_translate_element_desktop *,
+#google_translate_element_mobile *,
+.goog-te-gadget-simple *,
+.goog-te-gadget *,
+.goog-te-gadget-simple span,
+.goog-te-gadget-simple a,
+.goog-te-menu-value span,
+.goog-te-gadget span,
+.goog-te-gadget div,
+.goog-te-gadget a {
+  color: inherit !important;
+  background-color: transparent !important; /* Prevent child backgrounds from obscuring */
+  text-shadow: none !important;
+}
+
+/* Specific fix for the dropdown arrow/icon if present */
+.goog-te-gadget-icon {
+    display: none !important;
+}
+
+/* Hide "Powered by Google" branding if it interferes, or style it */
+.goog-logo-link {
+    display: none !important;
+}
+.goog-te-gadget {
+    font-size: 0 !important; /* Hide text nodes directly in gadget */
+}
+.goog-te-gadget > div {
+    font-size: 14px !important; /* Restore font size for the dropdown */
+    display: inline-block !important;
+}
+
+/* Text Styles inside the widget */
+/* .goog-te-gadget-simple > span {
+  color: #334155 !important; 
+  display: inline-block; 
+} */
+
+/* .dark .goog-te-gadget-simple > span {
+  color: #e2e8f0 !important; 
+} */
+
+.goog-te-gadget-simple > span > a {
+    color: inherit !important;
+    font-weight: 600 !important;
+}
+
+.goog-te-gadget-simple .goog-te-menu-value {
+  color: inherit !important;
+  margin: 0 !important;
+  /* display: flex !important; */
+  /* align-items: center !important; */
+  max-width: 100% !important;
+}
+
+.goog-te-gadget-simple .goog-te-menu-value span {
+  color: inherit !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  padding-right: 4px !important;
+  /* overflow: hidden !important; */
+  /* text-overflow: ellipsis !important; */
+}
+
+/* Hide the Google Icon - Optional, keeping hidden for cleaner look */
+.goog-te-gadget-icon {
+  display: none !important;
+}
+
+/* Hide the vertical separator pipe */
+.goog-te-gadget-simple > span[style*="border-left"] {
+    display: none !important;
+}
+
+/* Dropdown Menu Styles - Responsive Fixes */
+.goog-te-menu-frame {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid rgba(226, 232, 240, 1) !important;
+  z-index: 999999 !important;
+  position: fixed !important; /* Ensure it stays on screen */
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  max-height: 80vh !important; /* Prevent it from being too tall on mobile */
+  max-width: 90vw !important;
+  overflow-y: auto !important;
+}
+
+/* Tooltip hiding */
+.goog-tooltip {
+    display: none !important;
+}
+.goog-tooltip:hover {
+    display: none !important;
+}
+.goog-text-highlight {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Fix for "Powered by Google" text */
+.goog-te-gadget {
+    color: transparent !important;
+    font-size: 0 !important;
+    width: 100% !important;
+}
+.goog-te-gadget > div {
+    display: inline-block;
+    width: 100% !important;
+}
+
+/* Ensure the widget container doesn't break layout */
+#google_translate_element_desktop,
+#google_translate_element_mobile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  max-width: 100%;
+  overflow: hidden;
 }
