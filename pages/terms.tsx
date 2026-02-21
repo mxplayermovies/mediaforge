@@ -12,7 +12,7 @@ export default function TermsPage() {
 
   const readPageContent = () => {
     const text = `
-      Terms of Service. Last Updated October 2023.
+      Terms of Service. Last Updated January 2026.
       
       1. Acceptance of Terms. By accessing or using Media Forge, you agree to be bound by these Terms of Service.
       
@@ -50,7 +50,7 @@ export default function TermsPage() {
             <h1 className="text-3xl md:text-4xl font-bold mb-8 text-slate-900 dark:text-white">Terms of Service</h1>
             
             <div className="prose prose-lg dark:prose-invert prose-slate max-w-none">
-              <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">Last Updated: October 2023</p>
+              <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">Last Updated: January 2026</p>
 
               <h3>1. Acceptance of Terms</h3>
               <p>By accessing or using Media Forge, you agree to be bound by these Terms of Service.</p>
