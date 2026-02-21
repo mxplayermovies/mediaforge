@@ -32,6 +32,7 @@ export default function Document() {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     
+    
       </Head>
       <body className="bg-slate-50 dark:bg-[#0f172a] text-slate-900 dark:text-white antialiased transition-colors duration-300">
         <Main />

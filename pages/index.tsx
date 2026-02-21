@@ -41,11 +41,13 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Media Forge | Free AI Video Upscaler & Image Enhancer</title>
+        <title>Media Forge | Free Media Processor Enhancer.</title>
         <meta name="description" content="Use Media Forge to upscale video to 4K, enhance images, and restore old photos using AI. Free, secure, and runs in your browser with no file uploads." />
         <meta name="keywords" content="ai video upscaler, free video enhancer, 4k video converter, image upscaler, photo restoration, online video editor, 1080p to 4k, video denoise" />
         <meta property="og:title" content="Media Forge | AI Video Upscaler & Image Enhancer" />
         <meta property="og:description" content="Professional grade AI media tools in your browser. Upscale video to 4K and restore photos instantly." />
+        <meta name="robots" content="index, follow" />
+        <link rel="icon" href="/logo.png" type="image/png" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://mediaforge-official.vercel.app/" />
         <link rel="canonical" href="https://mediaforge-official.vercel.app/" />

@@ -91,9 +91,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <meta name="theme-color" content="#0a0a0a" />
         <meta name="robots" content="index, follow" />
-        <link rel="icon" href="/logo.png" type="image/png" />
-        <link rel="canonical" href="https://mediaforge-official.vercel.app/" />
-        <title>Media Forge Official | Media Processor </title>
+        <link rel="icon" href="/logo.png" type="image/png" />      
         </Head>
         
         {/* Google Translate Script */}
