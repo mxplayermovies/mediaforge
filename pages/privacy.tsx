@@ -12,7 +12,7 @@ export default function PrivacyPage() {
 
   const readPageContent = () => {
     const text = `
-      Privacy Policy. Last Updated October 2023.
+      Privacy Policy. Last Updated January 2026.
       
       1. Overview. Media Forge respects your privacy. This Privacy Policy describes how we handle data when you use our website and services.
       
@@ -25,7 +25,7 @@ export default function PrivacyPage() {
       
       4. Cookies. We use cookies solely for essential functionality like remembering your dark mode preference. We do not use third-party tracking cookies.
       
-      5. Contact Us. If you have questions about this policy, please contact us at privacy at mediaforge dot ai.
+      5. Contact Us. If you have questions about this policy, please contact us at privacy at media forge official at the rate protonmail dot com.
     `;
     voiceManager.speak(text, true);
   };
@@ -53,7 +53,7 @@ export default function PrivacyPage() {
             <h1 className="text-3xl md:text-4xl font-bold mb-8 text-slate-900 dark:text-white">Privacy Policy</h1>
             
             <div className="prose prose-lg dark:prose-invert prose-slate max-w-none">
-              <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">Last Updated: October 2023</p>
+              <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">Last Updated: January 2026</p>
 
               <h3>1. Overview</h3>
               <p>Media Forge ("we", "us", or "our") respects your privacy. This Privacy Policy describes how we handle data when you use our website and services.</p>
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
               <p>We use cookies solely for essential functionality (like remembering your dark mode preference). We do not use third-party tracking cookies.</p>
 
               <h3>5. Contact Us</h3>
-              <p>If you have questions about this policy, please contact us at privacy@mediaforge.ai.</p>
+              <p>If you have questions about this policy, please contact us at mediaforgeofficial@protonmail.com</p>
             </div>
           </div>
         </main>

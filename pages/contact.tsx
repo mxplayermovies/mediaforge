@@ -14,10 +14,10 @@ export default function ContactPage() {
 
   const readPageContent = () => {
     const text = `
-      Get in touch. Have questions about our API, Enterprise plans, or just want to say hello? We'd love to hear from you.
+      Get in touch. Have questions about our API, Enterprise or Business plans, or just want to say hello? We'd love to hear from you.
       
       Here are our contact channels:
-      Email. General support at support at mediaforge dot ai. Sales inquiries at sales at mediaforge dot ai.
+      Email. General support at support at media forge official at the rate protonmail dot com. Business inquiries at  media forge official at the rate protonmail dot com.
       
       Live Chat. Our team is available Monday to Friday, from 9 AM to 5 PM Pacific Standard Time.
       
@@ -76,7 +76,7 @@ export default function ContactPage() {
                 </button>
                 <h1 className="text-4xl font-bold mb-6 text-slate-900 dark:text-white">Get in touch</h1>
                 <p className="text-lg text-slate-600 dark:text-slate-400 mb-12">
-                  Have questions about our API, Enterprise plans, or just want to say hello? We'd love to hear from you.
+                  Have questions about our API, Enterprise or Business plans, or just want to say hello? We'd love to hear from you.
                 </p>
 
                 <div className="space-y-8">
@@ -86,8 +86,8 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-bold text-lg text-slate-900 dark:text-white">Email</h3>
-                      <p className="text-slate-600 dark:text-slate-400">support@mediaforge.ai</p>
-                      <p className="text-slate-600 dark:text-slate-400">sales@mediaforge.ai</p>
+                      <p className="text-slate-600 dark:text-slate-400">mediaforgeofficial@protonmail.com</p>
+                    
                     </div>
                   </div>
                   
