@@ -17,9 +17,10 @@ export default function ContactPage() {
       Get in touch. Have questions about our API, Enterprise or Business plans, or just want to say hello? We'd love to hear from you.
       
       Here are our contact channels:
-      Email. General support at support at media forge official at the rate protonmail dot com. Business inquiries at  media forge official at the rate protonmail dot com.
+      Email. General support or business inquiries at media forge official at the rate protonmail dot com. 
       
-      Live Chat. Our team is available Monday to Friday, from 9 AM to 5 PM Pacific Standard Time.
+      Live Chat. Our team is available Monday to Friday, from 9 AM to 5 PM Pacific Standard Time. 
+      or Googel Meet, Video call and meetings for everyone.
       
       Office Location. We are located at 123 Tech Plaza, Suite 400, San Francisco, California, zip code 94107.
     `;
@@ -98,6 +99,7 @@ export default function ContactPage() {
                     <div>
                       <h3 className="font-bold text-lg text-slate-900 dark:text-white">Live Chat</h3>
                       <p className="text-slate-600 dark:text-slate-400">Available Mon-Fri, 9am - 5pm PST</p>
+                       <p className="text-slate-600 dark:text-slate-400">or Googel Meet, Video call and meetings for everyone.</p>
                     </div>
                   </div>
 
