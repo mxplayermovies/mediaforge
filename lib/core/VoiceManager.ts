@@ -1807,7 +1807,6 @@ export class VoiceManager {
     haw: 'haw-US',    // Hawaiian
     ht: 'ht-HT',      // Haitian Creole
     hmn: 'hmn',       // Hmong
-    xh: 'xh-ZA',      // Xhosa
   };
 
   constructor() {
