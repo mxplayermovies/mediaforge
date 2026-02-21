@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ThemeContext } from '../components/Header';
 import Header from '../components/Header';
 import { voiceManager } from '../lib/core/VoiceManager';
+import { AlertTriangle } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -16,6 +17,8 @@ declare global {
 
 export default function App({ Component, pageProps }: AppProps) {
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showSecurityWarning, setShowSecurityWarning] = useState(false);
+  
 
   useEffect(() => {
     // Check local storage or preference
@@ -83,6 +86,19 @@ export default function App({ Component, pageProps }: AppProps) {
     }
   };
 
+    useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      setShowSecurityWarning(true);
+      setTimeout(() => setShowSecurityWarning(false), 2000);
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
+
   return (
     <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
       <>
@@ -118,6 +134,18 @@ export default function App({ Component, pageProps }: AppProps) {
             `,
           }}
         />
+              {/* Security Warning Toast */}
+      <div 
+        className={`fixed top-24 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-300 pointer-events-none ${
+          showSecurityWarning ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+        }`}
+      >
+        <div className="bg-red-600/95 backdrop-blur-md text-white px-6 py-3 rounded-full font-bold shadow-2xl border border-white/20 flex items-center gap-3">
+           <AlertTriangle size={20} className="text-white" />
+           <span className="text-sm md:text-base">Right click is disabled</span>
+        </div>
+      </div>
+
         <Header />
         <Component {...pageProps} />
       </>
