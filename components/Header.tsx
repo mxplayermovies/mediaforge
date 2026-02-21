@@ -96,7 +96,7 @@ export default function Header() {
               </button>
               
               <a 
-                href="https://median.co/share/bnlerow" 
+                href="https://median.co/share/bnlpkdo" 
                 target="_blank" 
                 download
                 className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-100 dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold hover:bg-slate-200 dark:hover:bg-white/10 transition-all border border-slate-200 dark:border-white/10"
@@ -159,7 +159,7 @@ export default function Header() {
           </Link>
           
           <a 
-            href="https://median.co/share/bnlerow" 
+            href="https://median.co/share/bnlpkdo" 
             target="_blank"
             download
             className="flex items-center gap-2 text-xl font-bold text-slate-600 dark:text-slate-400 hover:text-blue-500 py-2"
