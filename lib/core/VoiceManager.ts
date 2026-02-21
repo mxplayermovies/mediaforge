@@ -1385,11 +1385,19 @@ export class VoiceManager {
   private currentLang = 'en';
   private langObserver: MutationObserver | null = null;
 
+  // Google Translate uses some legacy ISO codes — map them to BCP-47
+  private static readonly LEGACY_LANG_MAP: Record<string, string> = {
+    iw: 'he',   // Hebrew
+    ji: 'yi',   // Yiddish
+    jw: 'jv',   // Javanese
+    in: 'id',   // Indonesian
+    zh: 'zh-CN' // Default Chinese to Simplified
+  };
+
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       this.synth = window.speechSynthesis;
 
-      // Load voices synchronously (Chrome) and asynchronously (Firefox/Safari)
       this.loadVoices();
       this.synth.onvoiceschanged = () => this.loadVoices();
 
@@ -1397,76 +1405,64 @@ export class VoiceManager {
       setTimeout(() => this.loadVoices(), 500);
       setTimeout(() => this.loadVoices(), 1500);
 
-      // Sync with Google Translate: watch <html lang="..."> attribute changes
+      // Auto-sync with Google Translate
       this.observeGoogleTranslate();
     }
   }
 
-  // ─── Google Translate Sync ────────────────────────────────────────────────
+  // ─── Google Translate Sync ───────────────────────────────────────────────
 
   /**
-   * Observes the <html> element's `lang` attribute for changes made by
-   * Google Translate (or any other translation tool).
-   * When detected, updates the TTS language accordingly.
+   * Watches <html lang="..."> attribute — Google Translate updates this
+   * whenever the user switches language. We mirror that change to TTS.
    */
   private observeGoogleTranslate() {
     if (typeof window === 'undefined') return;
 
     const htmlEl = document.documentElement;
 
-    // Set initial language from <html lang>
+    // Pick up language already set on page load
     const initialLang = htmlEl.getAttribute('lang');
     if (initialLang) this.applyLangCode(initialLang);
 
-    this.langObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'lang') {
-          const newLang = htmlEl.getAttribute('lang') || 'en';
-          console.log(`VoiceManager: Detected language change via Google Translate → ${newLang}`);
-          this.applyLangCode(newLang);
-        }
-      }
+    this.langObserver = new MutationObserver(() => {
+      const newLang = htmlEl.getAttribute('lang') || 'en';
+      console.log(`VoiceManager: Google Translate changed language → "${newLang}"`);
+      this.applyLangCode(newLang);
     });
 
-    this.langObserver.observe(htmlEl, { attributes: true, attributeFilter: ['lang'] });
+    this.langObserver.observe(htmlEl, {
+      attributes: true,
+      attributeFilter: ['lang']
+    });
   }
 
   /**
-   * Normalises a BCP-47 lang code coming from Google Translate
-   * (e.g. "zh-CN", "pt-BR", "iw" → "he") and updates TTS language.
+   * Normalises the lang code from Google Translate and applies it to TTS.
+   * Google Translate sets codes like "zh-CN", "ko", "hi", "fr", "iw" etc.
    */
   private applyLangCode(rawLang: string) {
-    // Google Translate quirks: legacy codes
-    const LEGACY_MAP: Record<string, string> = {
-      iw: 'he',  // Hebrew
-      ji: 'yi',  // Yiddish
-      jw: 'jv',  // Javanese
-      in: 'id',  // Indonesian
-    };
-
     const base = rawLang.split('-')[0].toLowerCase();
-    const normalised = LEGACY_MAP[base] ?? rawLang;
+    // Fix legacy codes first
+    const fixed = VoiceManager.LEGACY_LANG_MAP[base] ?? rawLang;
 
-    if (normalised !== this.currentLang) {
-      this.setLanguage(normalised);
+    if (fixed !== this.currentLang) {
+      console.log(`VoiceManager: Applying language "${fixed}"`);
+      this.setLanguage(fixed);
     }
   }
 
-  // ─── Public API ──────────────────────────────────────────────────────────
+  // ─── Public API ─────────────────────────────────────────────────────────
 
   /**
-   * Manually set the TTS language (e.g. called from UI language picker).
-   * Triggers a voice reload to match the new language.
+   * Manually set TTS language. Called by applyLangCode or externally.
    */
   public setLanguage(lang: string) {
     this.currentLang = lang;
-    console.log(`VoiceManager: Language set to "${this.currentLang}"`);
-    this.loadVoices();
+    this.loadVoices(); // Reload voices for the new language immediately
   }
 
-  /**
-   * Mobile: unlock audio context after first user gesture.
-   */
+  /** Mobile: call this on first user gesture to unlock audio context. */
   public unlock() {
     if (this.synth) {
       this.synth.resume();
@@ -1475,22 +1471,20 @@ export class VoiceManager {
   }
 
   /**
-   * Speaks the given text using the best available voice for the current language.
-   * @param text  - Text to speak
-   * @param force - Cancel any ongoing speech first (default: true)
+   * Speaks text in the CURRENT language (whatever Google Translate selected).
+   * If no voice exists for that language, falls back to English.
    */
   public speak(text: string, force = true) {
     if (!this.synth) return;
     if (force) this.synth.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const voice = this.getRandomVoice();
+    const voice = this.getBestVoice();
 
     if (voice) {
       utterance.voice = voice;
-      utterance.lang = voice.lang; // Android compatibility
+      utterance.lang = voice.lang; // Critical for Android
     } else {
-      // No voice found at all – let browser use its default
       utterance.lang = this.currentLang;
     }
 
@@ -1501,9 +1495,7 @@ export class VoiceManager {
     this.synth.speak(utterance);
   }
 
-  /**
-   * Announces progress milestones: 10 %, 25 %, 50 %, 75 %, 90 %.
-   */
+  /** Announces progress at 10%, 25%, 50%, 75%, 90% milestones. */
   public announceProgress(progress: number) {
     const milestones = [10, 25, 50, 75, 90];
     const crossed = milestones.find(m => progress >= m && this.lastMilestone < m);
@@ -1513,115 +1505,122 @@ export class VoiceManager {
     }
   }
 
-  /**
-   * Resets milestone tracker and stops ongoing speech.
-   */
+  /** Reset milestone tracker and stop any ongoing speech. */
   public reset() {
     this.lastMilestone = -1;
     this.synth?.cancel();
   }
 
-  /**
-   * Tear down the MutationObserver (call on component unmount).
-   */
+  /** Call on component unmount to prevent memory leaks. */
   public destroy() {
     this.langObserver?.disconnect();
     this.langObserver = null;
     this.synth?.cancel();
   }
 
-  // ─── Internal ────────────────────────────────────────────────────────────
+  // ─── Voice Selection Logic ──────────────────────────────────────────────
 
   /**
-   * Loads and prioritises voices for the current language.
+   * Core voice loading logic:
    *
-   * Priority order (STRICT):
-   *   1. Microsoft voices  ← Edge TTS, always preferred
-   *   2. Google voices
-   *   3. Any other voices matching the language
+   *  1. Find all voices matching this.currentLang
+   *     → Exact prefix match first (e.g. "zh-CN")
+   *     → Then base-code match (e.g. "zh" matches "zh-CN", "zh-TW")
    *
-   * Fallback (ENGLISH ONLY):
-   *   If no voices match the current language, fall back to English Microsoft
-   *   voices → English Google voices → any English voice.
-   *   this.currentLang is NEVER changed by a fallback so that when voices
-   *   become available later the correct language is used.
+   *  2. Within matched voices, apply STRICT priority:
+   *     Microsoft Edge TTS  ← ALWAYS FIRST
+   *     Google TTS          ← Second
+   *     Any other voice     ← Last resort for that language
+   *
+   *  3. If ZERO voices found for the language → ENGLISH ONLY fallback
+   *     (this.currentLang is NOT changed — so when voices load later, correct lang is used)
+   *
+   *  4. Last-resort: if even English fails, take any available voice.
    */
   private loadVoices() {
     if (!this.synth) return;
-
     const all = this.synth.getVoices();
-    if (all.length === 0) return; // Voices not ready yet
+    if (all.length === 0) return;
 
-    // ── Step 1: Find voices for the requested language ──────────────────
-    let langVoices = this.matchVoices(all, this.currentLang);
+    // Step 1: Find voices for the current language
+    let matched = this.matchByLang(all, this.currentLang);
 
-    // ── Step 2: English-only fallback ───────────────────────────────────
-    const usingFallback = langVoices.length === 0 && !this.currentLang.startsWith('en');
-    if (usingFallback) {
-      console.warn(
-        `VoiceManager: No voices found for "${this.currentLang}". ` +
-        `Falling back to English (this.currentLang unchanged).`
-      );
-      langVoices = this.matchVoices(all, 'en');
+    // Step 2: If no match → ENGLISH ONLY fallback (do NOT change this.currentLang)
+    if (matched.length === 0) {
+      if (!this.currentLang.startsWith('en')) {
+        console.warn(
+          `VoiceManager: No voices for "${this.currentLang}" on this device. ` +
+          `Falling back to English only. this.currentLang remains "${this.currentLang}".`
+        );
+      }
+      matched = this.matchByLang(all, 'en');
     }
 
-    // ── Step 3: Apply Microsoft → Google → Others priority ───────────────
-    this.availableVoices = this.prioritise(langVoices);
+    // Step 3: Apply Microsoft → Google → Others priority
+    this.availableVoices = this.applyPriority(matched);
 
-    // ── Step 4: Last-resort safety net ──────────────────────────────────
+    // Step 4: Absolute last resort
     if (this.availableVoices.length === 0) {
-      console.warn('VoiceManager: No voices at all – using full English list as last resort.');
-      this.availableVoices = this.prioritise(all.filter(v => v.lang.startsWith('en')));
+      this.availableVoices = this.applyPriority(all);
     }
 
-    if (!this.initialized) {
+    if (!this.initialized && this.availableVoices.length > 0) {
       console.log(
-        `VoiceManager: Initialised with ${this.availableVoices.length} voices ` +
-        `for "${this.currentLang}"${usingFallback ? ' (English fallback)' : ''}.`
+        `VoiceManager: Ready. ${this.availableVoices.length} voice(s) for ` +
+        `"${this.currentLang}". Top voice: "${this.availableVoices[0]?.name}"`
       );
       this.initialized = true;
     }
   }
 
   /**
-   * Returns voices from `pool` that match the given language code.
-   * Handles both exact (e.g. "zh-CN") and base-code (e.g. "zh") matching.
+   * Match voices for a given lang code.
+   * Tries full code first (e.g. "zh-CN"), then base code (e.g. "zh").
    */
-  private matchVoices(pool: SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice[] {
-    // Try exact prefix first (e.g. "zh-CN" matches "zh-CN-XiaoxiaoNeural")
-    let matched = pool.filter(v => v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+  private matchByLang(pool: SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice[] {
+    const lowerLang = lang.toLowerCase();
 
-    // If the lang has a region suffix and nothing matched, try the base code
-    if (matched.length === 0 && lang.includes('-')) {
-      const base = lang.split('-')[0];
-      matched = pool.filter(v => v.lang.toLowerCase().startsWith(base.toLowerCase()));
+    // Exact prefix: "zh-CN" matches "zh-CN-XiaoxiaoNeural", "zh-CNjj" etc.
+    let result = pool.filter(v => v.lang.toLowerCase().startsWith(lowerLang));
+
+    // Base-code fallback: "zh" matches "zh-CN", "zh-TW", etc.
+    if (result.length === 0 && lowerLang.includes('-')) {
+      const base = lowerLang.split('-')[0];
+      result = pool.filter(v => v.lang.toLowerCase().startsWith(base));
     }
 
-    return matched;
+    return result;
   }
 
   /**
-   * Applies the Microsoft → Google → Others priority to a list of voices.
-   * Returns ALL voices from the highest-priority group found.
+   * STRICT priority: Microsoft Edge TTS > Google TTS > Everything else.
+   * Returns ALL voices from the winning group (covers male + female variants).
    */
-  private prioritise(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+  private applyPriority(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
     const microsoft = voices.filter(v => v.name.includes('Microsoft'));
-    if (microsoft.length > 0) return microsoft;
+    if (microsoft.length > 0) {
+      console.log(`VoiceManager: Using ${microsoft.length} Microsoft voice(s).`);
+      return microsoft;
+    }
 
     const google = voices.filter(v => v.name.includes('Google'));
-    if (google.length > 0) return google;
+    if (google.length > 0) {
+      console.log(`VoiceManager: Using ${google.length} Google voice(s).`);
+      return google;
+    }
 
-    return voices; // All others
+    console.log(`VoiceManager: Using ${voices.length} system voice(s).`);
+    return voices;
   }
 
   /**
-   * Returns a random voice from the available pool.
-   * Retries a voice reload if the pool is empty.
+   * Picks a random voice from the available pool.
+   * Randomising across multiple voices gives variety (male/female/accent).
    */
-  private getRandomVoice(): SpeechSynthesisVoice | null {
+  private getBestVoice(): SpeechSynthesisVoice | null {
     if (this.availableVoices.length === 0) this.loadVoices();
     if (this.availableVoices.length === 0) {
-      console.warn('VoiceManager: No suitable voices found – browser default will be used.');
+      console.warn('VoiceManager: No voices available at all.');
       return null;
     }
     return this.availableVoices[Math.floor(Math.random() * this.availableVoices.length)];
